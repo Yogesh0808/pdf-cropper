@@ -1,10 +1,10 @@
 import fitz  # PyMuPDF
 from PIL import Image
-import io
+import os
 
 def convert_pdf_to_tiff(input_pdf_path):
     doc = fitz.open(input_pdf_path)
-    page = doc[0]  # Single-page PDF
+    page = doc[0]
 
     zoom = 300 / 72
     mat = fitz.Matrix(zoom, zoom)
@@ -13,9 +13,9 @@ def convert_pdf_to_tiff(input_pdf_path):
     img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
     bw_img = img.convert("L").point(lambda x: 0 if x < 128 else 255, mode='1')
 
-    # Save to in-memory buffer
-    buffer = io.BytesIO()
-    bw_img.save(buffer, format="TIFF", compression="tiff_lzw")
-    buffer.seek(0)
+    # Save TIFF temporarily
+    base_name = os.path.splitext(os.path.basename(input_pdf_path))[0]
+    output_path = os.path.join("uploads", f"{base_name}.tiff")
+    bw_img.save(output_path, format="TIFF", compression="tiff_lzw")
 
-    return buffer.read()
+    return output_path
