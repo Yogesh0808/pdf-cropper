@@ -1,81 +1,110 @@
-const dropArea = document.getElementById('drop-area');
-const fileInput = document.getElementById('file-input');
-const preview = document.getElementById('preview');
+document.addEventListener("DOMContentLoaded", () => {
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("file-input");
+  const form = document.getElementById("upload-form");
+  const message = document.getElementById("message");
+  const progressBar = document.getElementById("progress-bar");
+  const progressContainer = document.getElementById("progress-container");
 
-dropArea.addEventListener('click', () => fileInput.click());
+  let selectedFile = null;
 
-dropArea.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  dropArea.classList.add('bg-light');
-});
+  // Click to open file picker
+  dropzone.addEventListener("click", () => fileInput.click());
 
-dropArea.addEventListener('dragleave', () => {
-  dropArea.classList.remove('bg-light');
-});
-
-dropArea.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dropArea.classList.remove('bg-light');
-  const files = e.dataTransfer.files;
-  fileInput.files = files;
-  showPreview(files);
-});
-
-fileInput.addEventListener('change', () => {
-  showPreview(fileInput.files);
-});
-
-function showPreview(files) {
-  preview.innerHTML = '';
-  Array.from(files).forEach(file => {
-    const fileBox = document.createElement('div');
-    fileBox.className = 'file-box';
-    fileBox.innerHTML = `
-      <strong>${file.name}</strong><br>
-      ${(file.size / 1024).toFixed(1)} KB
-      <div class="progress mt-2">
-        <div class="progress-bar bg-success" role="progressbar" style="width: 0%"></div>
-      </div>
-    `;
-    preview.appendChild(fileBox);
+  // Drag styling
+  dropzone.addEventListener("dragover", e => {
+      e.preventDefault();
+      dropzone.classList.add("bg-light");
   });
-}
 
-document.getElementById('upload-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const files = fileInput.files;
-  if (!files.length) return;
+  dropzone.addEventListener("dragleave", () => {
+      dropzone.classList.remove("bg-light");
+  });
 
-  const previews = document.querySelectorAll('.file-box');
+  // File dropped
+  dropzone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropzone.classList.remove("bg-light");
+      selectedFile = e.dataTransfer.files[0];
+      dropzone.textContent = selectedFile.name;
+  });
 
-  for (let i = 0; i < files.length; i++) {
-    const formData = new FormData();
-    formData.append('file', files[i]);
+  // File chosen manually
+  fileInput.addEventListener("change", () => {
+      selectedFile = fileInput.files[0];
+      dropzone.textContent = selectedFile.name;
+  });
 
-    const res = await fetch('/upload', {
-      method: 'POST',
-      body: formData
-    });
+  // Form submit
+  form.addEventListener("submit", async e => {
+      e.preventDefault();
+      if (!selectedFile) return alert("Please select a PDF file.");
 
-    if (res.ok) {
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = files[i].name.replace('.pdf', '.tiff');
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      // Reset UI
+      message.innerHTML = "";
+      progressBar.style.width = "0%";
+      progressContainer.style.display = "block";
 
-      const bar = previews[i].querySelector('.progress-bar');
-      bar.style.width = '100%';
-      bar.textContent = 'Done';
-    } else {
-      const bar = previews[i].querySelector('.progress-bar');
-      bar.classList.remove('bg-success');
-      bar.classList.add('bg-danger');
-      bar.style.width = '100%';
-      bar.textContent = 'Failed';
-    }
-  }
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      try {
+          const xhr = new XMLHttpRequest();
+
+          xhr.open("POST", "/upload/", true);
+          xhr.responseType = "blob";
+
+          xhr.upload.onprogress = function (e) {
+              if (e.lengthComputable) {
+                  const percent = (e.loaded / e.total) * 100;
+                  progressBar.style.width = percent + "%";
+                  progressBar.textContent = Math.floor(percent) + "%";
+              }
+          };
+
+          xhr.onload = function () {
+              if (xhr.status === 200) {
+                  const blob = xhr.response;
+                  const previewUrl = URL.createObjectURL(blob);
+
+                  // Preview image
+                  const imgPreview = document.createElement("img");
+                  imgPreview.src = previewUrl;
+                  imgPreview.classList.add("img-fluid", "my-3", "border", "rounded");
+
+                  message.innerHTML = "";
+                  message.appendChild(imgPreview);
+
+                  // Trigger download
+                  const a = document.createElement("a");
+                  a.href = previewUrl;
+                  a.download = selectedFile.name.replace(".pdf", ".tiff");
+                  a.click();
+
+                  URL.revokeObjectURL(previewUrl);
+              } else {
+                  message.textContent = "❌ Conversion failed.";
+              }
+
+              progressBar.style.width = "100%";
+              progressBar.textContent = "Done";
+              setTimeout(() => {
+                  progressContainer.style.display = "none";
+                  progressBar.style.width = "0%";
+                  progressBar.textContent = "";
+              }, 1500);
+          };
+
+          xhr.onerror = function () {
+              message.textContent = "❌ Upload failed.";
+              progressContainer.style.display = "none";
+          };
+
+          xhr.send(formData);
+      } catch (err) {
+          console.error(err);
+          message.textContent = "❌ Something went wrong.";
+          progressContainer.style.display = "none";
+      }
+  });
 });
